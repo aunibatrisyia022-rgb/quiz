@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pirate Hunt 3D — Misi Koordinat</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#071b2a;color:#fff;font-family:system-ui,Segoe UI,sans-serif;overflow:hidden}
+#game{position:fixed;inset:0}canvas{display:block}
+.panel{position:fixed;z-index:3;background:rgba(5,24,39,.86);border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(8px);border-radius:16px;padding:14px;box-shadow:0 10px 35px #0005}
+#hud{top:14px;left:14px;max-width:320px}#hud h1{font-size:20px;margin:0 0 5px;color:#ffd166}#hud p{margin:5px 0;font-size:13px;line-height:1.45}
+#mission{top:14px;right:14px;width:min(330px,calc(100vw - 28px))}#mission h2{font-size:17px;margin:0 0 8px;color:#8be9fd}
+button{font:inherit;border:0;border-radius:10px;padding:10px 13px;background:#ffd166;color:#32230b;font-weight:800;cursor:pointer;margin:4px 3px 0 0}button:hover{filter:brightness(1.08)}button:disabled{opacity:.4;cursor:not-allowed}
+#quiz{display:none;position:fixed;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,calc(100vw - 28px));max-height:90vh;overflow:auto;background:#08263a;border:2px solid #ffd166;border-radius:20px;padding:20px;box-shadow:0 20px 80px #000b}
+#quiz h2{margin:0 0 8px;color:#ffd166}#question{line-height:1.5}#answers button{display:block;width:100%;text-align:left;background:#16435b;color:white;border:1px solid #47758a;margin-top:8px}#answers button:hover{background:#24627c}
+#feedback{min-height:24px;font-weight:700;margin-top:10px}#start{position:fixed;z-index:4;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(#031a2bd9,#031a2bce);padding:20px}
+#start .card{max-width:560px;text-align:center;background:#09283d;border:2px solid #ffd166;border-radius:24px;padding:26px;box-shadow:0 15px 60px #0008}#start h1{font-size:clamp(28px,5vw,46px);color:#ffd166;margin:0 0 8px}#start p{line-height:1.6;color:#e3f4f8}
+#controls{position:fixed;z-index:3;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:7px;align-items:center;background:#061b2bbd;padding:8px;border-radius:15px}
+#controls button{width:48px;height:44px;padding:0;font-size:18px;background:#e6f5f8;color:#123}#hint{position:fixed;z-index:3;bottom:76px;left:50%;transform:translateX(-50%);font-size:12px;background:#061b2bc9;padding:7px 12px;border-radius:20px;white-space:nowrap}
+#progress{height:8px;background:#214154;border-radius:9px;overflow:hidden;margin:10px 0}#bar{height:100%;width:0;background:#ffd166;transition:width .4s}
+@media(max-width:600px){#hud{max-width:190px;padding:10px}#hud h1{font-size:16px}#hud p{font-size:11px}#mission{top:auto;bottom:140px;width:190px;padding:10px}#mission p{font-size:12px}#hint{bottom:126px}#controls{bottom:12px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud" class="panel"><h1>🏴‍☠️ PIRATE HUNT 3D</h1><p>⭐ Bintang: <b id="stars">0</b> / 10</p><p>📍 Misi: <b id="stage">1</b> / 10</p><div id="progress"><div id="bar"></div></div><p>Gerakkan lanun ke penanda bercahaya untuk menjawab soalan koordinat.</p></div>
+<div id="mission" class="panel"><h2>🧭 Peta Misi</h2><p id="missionText">Cari checkpoint kapal di tepi pantai.</p><p><b>Kawalan:</b> WASD / anak panah untuk bergerak, tetikus untuk kamera.</p><button id="mapBtn">Lihat Grid Koordinat</button></div>
+<div id="hint">WASD / anak panah untuk bergerak • Dekati penanda emas</div>
+<div id="controls"><button data-move="forward">▲</button><button data-move="left">◀</button><button data-move="back">▼</button><button data-move="right">▶</button></div>
+<div id="start"><div class="card"><h1>🏝️ PIRATE HUNT 3D</h1><p>Selamat datang, pemburu harta! Jelajahi pulau 3D, cari 10 checkpoint dan selesaikan cabaran koordinat Tahun 4 untuk membuka gua harta karun.</p><p>Gerakkan watak menggunakan <b>WASD</b> atau butang arah. Dekati cahaya emas untuk memulakan soalan.</p><button id="play">MULA PENGEMBARAAN</button></div></div>
+<div id="quiz"><h2 id="quizTitle">Checkpoint</h2><div id="question"></div><div id="answers"></div><div id="feedback"></div><button id="continue" style="display:none">Teruskan misi ➜</button></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(()=> {
+const host=document.getElementById('game');
+if(!window.THREE){host.innerHTML='<div style="padding:40px">Internet diperlukan untuk memuatkan enjin 3D Three.js. Sila semak sambungan internet dan refresh halaman.</div>';return;}
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x74d4e8);scene.fog=new THREE.Fog(0x74d4e8,28,85);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,200);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;host.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xc8f4ff,0x55733c,2));
+const sun=new THREE.DirectionalLight(0xfff2cc,2.3);sun.position.set(-15,25,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+const mat=(c,rough=.9)=>new THREE.MeshStandardMaterial({color:c,roughness:rough});
+const sand=mat(0xe8cc83),grass=mat(0x48a85a),deep=mat(0x147eaa),wood=mat(0x80502b),darkwood=mat(0x50321f),leaf=mat(0x20804d),leaf2=mat(0x39a95b),rock=mat(0x68777b),gold=mat(0xffc928,.35),red=mat(0xb83c2f),shirt=mat(0x245d80),skin=mat(0xdba16f),black=mat(0x20252b),white=mat(0xf4ead3);
+function mesh(geo,m,x,y,z,sx=1,sy=1,sz=1){const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.scale.set(sx,sy,sz);o.castShadow=true;o.receiveShadow=true;scene.add(o);return o;}
+mesh(new THREE.PlaneGeometry(200,200),deep,0,-.9,0).rotation.x=-Math.PI/2;
+const island=mesh(new THREE.CylinderGeometry(22,25,2.5,64),sand,0,.05,0,1,1,1);island.position.y=-.15;
+mesh(new THREE.CylinderGeometry(18.8,21,1.1,64),grass,0,.7,0);
+function tree(x,z,s=1){mesh(new THREE.CylinderGeometry(.22*s,.36*s,2.8*s,8),wood,x,2.0*s,z);let a=mesh(new THREE.ConeGeometry(1.25*s,2.3*s,7),leaf,x,3.5*s,z);a.rotation.y=.3;let b=mesh(new THREE.ConeGeometry(.95*s,1.7*s,7),leaf2,x,4.35*s,z);b.rotation.y=.7;}
+for(const t of [[-12,-7,1.2],[-15,1,1],[-9,10,.9],[10,-10,1.1],[14,-2,1.3],[10,9,1],[-2,14,.8],[3,-14,.9],[-17,6,.7],[16,5,.8]])tree(...t);
+for(let i=0;i<20;i++){let a=i*2.4;mesh(new THREE.DodecahedronGeometry(.8+Math.random()*.7),rock,Math.cos(a)*17,.9,Math.sin(a)*17,.8,.7,.8);}
+function chest(x,z){let c=mesh(new THREE.BoxGeometry(1.5,.85,1),wood,x,.95,z);mesh(new THREE.BoxGeometry(1.55,.18,1.05),gold,x,1.45,z);mesh(new THREE.BoxGeometry(.2,.6,.12),gold,x,1.1,z+.54);}
+chest(3,-12);
+function boat(x,z){let hull=mesh(new THREE.ConeGeometry(2,5,4),darkwood,x,.8,z,1,1,.7);hull.rotation.y=Math.PI/4;hull.rotation.x=Math.PI;mesh(new THREE.BoxGeometry(.18,5,.18),wood,x,3.3,z);mesh(new THREE.PlaneGeometry(2.5,3.2),white,x+.8,3.1,z);mesh(new THREE.PlaneGeometry(1.8,2.3),red,x-.7,2.8,z+.1);}
+boat(-12,11);
+// cave entrance
+mesh(new THREE.BoxGeometry(6,4,2),rock,12,.9,12);mesh(new THREE.BoxGeometry(3.2,3.5,2.2),black,12,.75,10.9);mesh(new THREE.TorusGeometry(2.1,.35,8,20,Math.PI),rock,12,2.7,10.7).rotation.z=Math.PI;
+for(let i=0;i<5;i++){mesh(new THREE.SphereGeometry(.12,8,8),gold,11+Math.random()*2,1+Math.random()*2,10.2);}
+const avatar=new THREE.Group();scene.add(avatar);
+mesh(new THREE.CylinderGeometry(.38,.48,1.05,12),shirt,0,1.15,0).parent=avatar;
+mesh(new THREE.SphereGeometry(.38,16,12),skin,0,1.95,0).parent=avatar;
+const hat=mesh(new THREE.CylinderGeometry(.53,.53,.16,16),black,0,2.28,0);hat.parent=avatar;
+const brim=mesh(new THREE.CylinderGeometry(.72,.72,.09,16),black,0,2.2,0);brim.parent=avatar;
+const band=mesh(new THREE.BoxGeometry(.28,.15,.08),red,0,2.3,.49);band.parent=avatar;
+for(let side of [-1,1]){let arm=mesh(new THREE.CylinderGeometry(.12,.15,.72,8),shirt,side*.48,1.35,0);arm.rotation.z=side*.35;arm.parent=avatar;let leg=mesh(new THREE.CylinderGeometry(.16,.18,.65,8),darkwood,side*.22,.52,0);leg.parent=avatar;}
+avatar.position.set(-12,0,11);
+const markers=[];const points=[[-12,11],[-8,7],[-3,9],[2,7],[7,5],[10,0],[5,-4],[0,-8],[-6,-7],[12,11]];
+const labels=['Kapal','Pantai','Pokok Kelapa','Runtuhan','Batu Misteri','Tasik','Jambatan','Pokok Besar','Laluan Gua','Gua Harta'];
+points.forEach((p,i)=>{const g=new THREE.Group();scene.add(g);const orb=mesh(new THREE.OctahedronGeometry(.65),gold,p[0],1.7,p[1]);orb.material=gold;g.add(orb);const ring=mesh(new THREE.TorusGeometry(.9,.07,8,24),gold,p[0],.25,p[1]);ring.rotation.x=Math.PI/2;g.add(ring);markers.push({group:g,orb,ring,x:p[0],z:p[1],label:labels[i],active:i===0,done:false});});
+let stage=0,stars=0,playing=false,quizOpen=false,move={forward:false,back:false,left:false,right:false},yaw=0,pitch=.18,mouseDown=false,lastX=0,lastY=0;
+const questions=[
+{q:'Kapal lanun berada pada koordinat (3, 2). Apakah koordinatnya mengikut tertib mengufuk dahulu, kemudian mencancang?',a:['(2, 3)','(3, 2)','(3, 3)','(2, 2)'],c:1},
+{q:'Pada grid, cari titik yang berada 4 unit mengufuk dan 2 unit mencancang. Apakah koordinatnya?',a:['(2, 4)','(4, 2)','(4, 4)','(2, 2)'],c:1},
+{q:'Peta menunjukkan pokok kelapa pada koordinat (2, 5). Nilai mengufuk ialah…',a:['5','2','7','3'],c:1},
+{q:'Pilih koordinat bagi titik yang berada 1 unit mengufuk dan 4 unit mencancang.',a:['(4, 1)','(1, 4)','(1, 1)','(4, 4)'],c:1},
+{q:'Koordinat ditulis mengufuk dahulu, kemudian mencancang. Jika mengufuk = 5 dan mencancang = 3, koordinat ialah…',a:['(3, 5)','(5, 3)','(5, 5)','(3, 3)'],c:1},
+{q:'Penyu berada pada koordinat (4, 4). Berapakah nilai mencancang?',a:['4','8','0','2'],c:0},
+{q:'Pilih koordinat bagi titik yang berada 5 unit mengufuk dan 5 unit mencancang.',a:['(5, 4)','(4, 5)','(5, 5)','(4, 4)'],c:2},
+{q:'Burung kakak tua berada pada koordinat (1, 3). Apakah koordinatnya?',a:['(3, 1)','(1, 3)','(3, 3)','(1, 1)'],c:1},
+{q:'Apakah koordinat titik yang berada 3 unit mengufuk dan 1 unit mencancang?',a:['(1, 3)','(3, 1)','(3, 3)','(1, 1)'],c:1},
+{q:'Harta karun berada pada koordinat (5, 2). Apakah pasangan nombor yang betul?',a:['(2, 5)','(5, 2)','(5, 5)','(2, 2)'],c:1}
+];
+function updateHUD(){document.getElementById('stars').textContent=stars;document.getElementById('stage').textContent=Math.min(stage+1,10);document.getElementById('bar').style.width=(stars*10)+'%';document.getElementById('missionText').textContent=stage>=10?'Tahniah! Semua misi selesai. Harta karun milik awak!':'Pergi ke checkpoint '+(stage+1)+': '+labels[stage]+'.';}
+function showQuiz(){quizOpen=true;playing=false;const q=questions[stage];document.getElementById('quizTitle').textContent='Checkpoint '+(stage+1)+' — '+labels[stage];document.getElementById('question').textContent=q.q;document.getElementById('answers').innerHTML='';document.getElementById('feedback').textContent='';document.getElementById('continue').style.display='none';q.a.forEach((a,i)=>{let b=document.createElement('button');b.textContent=String.fromCharCode(65+i)+'. '+a;b.onclick=()=>{if(b.dataset.locked)return;document.querySelectorAll('#answers button').forEach(x=>x.dataset.locked='1');if(i===q.c){stars++;markers[stage].done=true;markers[stage].active=false;document.getElementById('feedback').textContent='✅ Betul! +1 bintang. Laluan seterusnya terbuka!';document.getElementById('feedback').style.color='#8ff0a4';document.getElementById('continue').style.display='inline-block';}else{document.getElementById('feedback').textContent='❌ Belum tepat. Cuba semula!';document.getElementById('feedback').style.color='#ff9999';document.querySelectorAll('#answers button').forEach(x=>{x.dataset.locked='';x.disabled=false;});b.dataset.locked='';}};document.getElementById('answers').appendChild(b);});document.getElementById('quiz').style.display='block';}
+document.getElementById('continue').onclick=()=>{document.getElementById('quiz').style.display='none';quizOpen=false;stage++;if(stage>=10){document.getElementById('missionText').textContent='🎉 Misi lengkap! Awak telah menemui harta karun!';document.getElementById('quizTitle').textContent='🏆 PEMBURU HARTA HEBAT!';document.getElementById('question').textContent='Tahniah! Awak berjaya menyelesaikan 10 cabaran koordinat dan menemui harta karun pulau.';document.getElementById('answers').innerHTML='💎 💰 🏆';document.getElementById('feedback').textContent='Jumlah bintang: '+stars+'/10';document.getElementById('continue').style.display='none';document.getElementById('quiz').style.display='block';quizOpen=true;}else{markers[stage].active=true;avatar.position.set(markers[stage].x,0,markers[stage].z);updateHUD();}};
+document.getElementById('play').onclick=()=>{document.getElementById('start').style.display='none';playing=true;updateHUD();};
+document.getElementById('mapBtn').onclick=()=>{alert('Grid koordinat: nilai mengufuk dibaca dahulu (paksi X), kemudian nilai mencancang (paksi Y). Contoh: (3, 2) bermaksud 3 unit mengufuk dan 2 unit mencancang.');};
+document.querySelectorAll('[data-move]').forEach(b=>{const k=b.dataset.move;b.addEventListener('pointerdown',e=>{e.preventDefault();move[k]=true;});['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>move[k]=false));});
+addEventListener('keydown',e=>{let k=e.key.toLowerCase();if(k==='w'||k==='arrowup')move.forward=true;if(k==='s'||k==='arrowdown')move.back=true;if(k==='a'||k==='arrowleft')move.left=true;if(k==='d'||k==='arrowright')move.right=true;});
+addEventListener('keyup',e=>{let k=e.key.toLowerCase();if(k==='w'||k==='arrowup')move.forward=false;if(k==='s'||k==='arrowdown')move.back=false;if(k==='a'||k==='arrowleft')move.left=false;if(k==='d'||k==='arrowright')move.right=false;});
+renderer.domElement.addEventListener('pointerdown',e=>{mouseDown=true;lastX=e.clientX;lastY=e.clientY;renderer.domElement.setPointerCapture(e.pointerId);});renderer.domElement.addEventListener('pointerup',()=>mouseDown=false);renderer.domElement.addEventListener('pointermove',e=>{if(mouseDown){yaw-=(e.clientX-lastX)*.006;pitch=Math.max(-.1,Math.min(.7,pitch+(e.clientY-lastY)*.003));lastX=e.clientX;lastY=e.clientY;}});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+const clock=new THREE.Clock();
+function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();markers.forEach((m,i)=>{m.group.position.y= Math.sin(t*2+i)*.13;m.orb.rotation.y=t*.8;if(!m.active)m.orb.material=mat(m.done?0x65d98a:0x71818a);else m.orb.material=gold;});if(playing&&!quizOpen&&stage<10){let forward=(move.forward?1:0)-(move.back?1:0),side=(move.right?1:0)-(move.left?1:0);if(forward||side){const dir=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));const right=new THREE.Vector3(dir.z,0,-dir.x);avatar.position.addScaledVector(dir,forward*.12);avatar.position.addScaledVector(right,side*.12);avatar.rotation.y=Math.atan2(dir.x,dir.z)+(side?side*.45:0);avatar.position.x=Math.max(-19,Math.min(19,avatar.position.x));avatar.position.z=Math.max(-17,Math.min(17,avatar.position.z));}
+const target=new THREE.Vector3(avatar.position.x,1.4,avatar.position.z);const offset=new THREE.Vector3(Math.sin(yaw)*8,4.5+pitch*3,Math.cos(yaw)*8);camera.position.lerp(target.clone().add(offset),.08);camera.lookAt(target);
+const m=markers[stage];if(m&&Math.hypot(avatar.position.x-m.x,avatar.position.z-m.z)<2.1){showQuiz();}}
+else {camera.position.lerp(new THREE.Vector3(avatar.position.x+8,8,avatar.position.z+9),.02);camera.lookAt(avatar.position.x,1,avatar.position.z);}
+renderer.render(scene,camera);}
+camera.position.set(-5,7,19);camera.lookAt(0,0,0);animate();
+})();
+</script>
+</body>
+</html>
